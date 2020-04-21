@@ -1110,7 +1110,7 @@ def _get_accession_number(admID, doc):
     <premis:eventType> of "registration". Return the text value (with leading
     "accession#" stripped out) from the <premis:eventOutcomeDetailNote>.
 
-    If file file does not have an amdSec (i.e. is a metadata file)
+    If file does not have an amdSec (i.e. is a metadata file)
     or no matching <premis:event> entries is found, return None.
 
     :param admID: admID for amdSec to parse
