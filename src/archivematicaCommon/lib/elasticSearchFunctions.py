@@ -1148,8 +1148,8 @@ def _get_accession_number(admID, doc):
         if not registration_detail_notes:
             return None
         detail_text = registration_detail_notes[0].text
-        # Strip "accession#" from start of string
-        return detail_text[10:]
+        ACCESSION_PREFIX = "accession#"
+        return detail_text[len(ACCESSION_PREFIX) :]
     return None
 
 
