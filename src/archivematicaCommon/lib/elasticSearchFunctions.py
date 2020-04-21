@@ -29,22 +29,20 @@ import os
 import re
 import sys
 import time
-from lxml import etree
 
 from django.db.models import Min, Q
-from main.models import File, Identifier, Transfer
+from elasticsearch import Elasticsearch, ImproperlyConfigured
+from elasticsearch.helpers import bulk
+from lxml import etree
+from six.moves import range
 
 # archivematicaCommon
-from archivematicaFunctions import get_dashboard_uuid
+from archivematicaFunctions import get_dashboard_uuid, get_dir_size
+from externals import xmltodict
 import namespaces as ns
 import version
 
-from externals import xmltodict
-
-from elasticsearch import Elasticsearch, ImproperlyConfigured
-from elasticsearch.helpers import bulk
-
-from six.moves import range
+from main.models import File, Identifier, Transfer
 
 
 logger = logging.getLogger("archivematica.common")
@@ -224,6 +222,7 @@ def _get_aips_index_body():
                         "analyzer": "file_path_and_name",
                     },
                     "size": {"type": "double"},
+                    "file_count": {"type": "integer"},
                     "uuid": {"type": "keyword"},
                 },
             }
@@ -258,6 +257,7 @@ def _get_aipfiles_index_body():
                     "fileExtension": {"type": "text"},
                     "origin": {"type": "text"},
                     "identifiers": {"type": "keyword"},
+                    "accessionid": {"type": "keyword"},
                 },
             }
         },
@@ -277,8 +277,10 @@ def _get_transfers_index_body():
                     },
                     "status": {"type": "text"},
                     "ingest_date": {"type": "date", "format": "dateOptionalTime"},
+                    "size": {"type": "double"},
                     "file_count": {"type": "integer"},
                     "uuid": {"type": "keyword"},
+                    "accessionid": {"type": "keyword"},
                     "pending_deletion": {"type": "boolean"},
                 }
             }
@@ -328,6 +330,7 @@ def _get_transferfiles_index_body():
                             "group": {"type": "text"},
                         },
                     },
+                    "pending_deletion": {"type": "boolean"},
                 }
             }
         },
@@ -402,8 +405,7 @@ def index_aip_and_files(
         logger.error(error_message)
         printfn(error_message, file=sys.stderr)
         return 1
-    printfn("AIP UUID: " + uuid)
-    printfn("Indexing AIP ...")
+
     tree = etree.parse(mets_staging_path)
     _remove_tool_output_from_mets(tree)
     root = tree.getroot()
@@ -443,11 +445,27 @@ def index_aip_and_files(
 
     aip_metadata = _get_aip_metadata(root)
 
+    printfn("AIP UUID: " + uuid)
+    printfn("Indexing AIP files ...")
+
+    (files_indexed, accession_ids) = _index_aip_files(
+        client=client,
+        uuid=uuid,
+        mets=root,
+        name=name,
+        identifiers=identifiers,
+        aip_metadata=aip_metadata,
+    )
+
+    printfn("Files indexed: " + str(files_indexed))
+    printfn("Indexing AIP ...")
+
     aip_data = {
         "uuid": uuid,
         "name": name,
         "filePath": aip_stored_path,
         "size": int(aip_size) / (1024 * 1024),
+        "file_count": files_indexed,
         "origin": get_dashboard_uuid(),
         "created": created,
         "AICID": aic_identifier,
@@ -456,19 +474,13 @@ def index_aip_and_files(
         "identifiers": identifiers,
         "transferMetadata": aip_metadata,
         "encrypted": encrypted,
+        "accessionids": accession_ids,
     }
+
     _wait_for_cluster_yellow_status(client)
     _try_to_index(client, aip_data, "aips", printfn=printfn)
     printfn("Done.")
-    printfn("Indexing AIP files ...")
-    _index_aip_files(
-        client=client,
-        uuid=uuid,
-        mets=root,
-        name=name,
-        identifiers=identifiers,
-        aip_metadata=aip_metadata,
-    )
+
     return 0
 
 
@@ -482,7 +494,9 @@ def _index_aip_files(client, uuid, mets, name, identifiers=None, aip_metadata=No
     :param identifiers: optional additional identifiers (MODS, Islandora, etc.).
     :param aip_metadata: list with the descriptive and administrative metadata
                          of each directory in the AIP
+    :return: number of files indexed, list of accession numbers
     """
+
     # Extract isPartOf (for AIPs) or identifier (for AICs) from DublinCore
     dublincore = ns.xml_find_premis(
         mets, "mets:dmdSec/mets:mdWrap/mets:xmlData/dcterms:dublincore"
@@ -506,6 +520,8 @@ def _index_aip_files(client, uuid, mets, name, identifiers=None, aip_metadata=No
     if aip_metadata is None:
         aip_metadata = []
 
+    accession_ids = []
+
     # Establish structure to be indexed for each file item
     fileData = {
         "archivematicaVersion": version.get_version(),
@@ -519,6 +535,7 @@ def _index_aip_files(client, uuid, mets, name, identifiers=None, aip_metadata=No
         "AICID": aic_identifier,
         "METS": {"dmdSec": {}, "amdSec": {}},
         "origin": get_dashboard_uuid(),
+        "accessionid": "",
     }
 
     # Index all files in a fileGrup with USE='original' or USE='metadata'
@@ -550,9 +567,7 @@ def _index_aip_files(client, uuid, mets, name, identifiers=None, aip_metadata=No
                 if len(set(uuids)) == 1:
                     fileUUID = uuids[0]
             else:
-                amdSecInfo = ns.xml_find_premis(
-                    mets, "mets:amdSec[@ID='{}']".format(admID)
-                )
+                amdSecInfo = _get_amdSec(admID, mets)
                 fileUUID = ns.xml_findtext_premis(
                     amdSecInfo,
                     "mets:techMD/mets:mdWrap/mets:xmlData/premis:object/premis:objectIdentifier/premis:objectIdentifierValue",
@@ -565,6 +580,14 @@ def _index_aip_files(client, uuid, mets, name, identifiers=None, aip_metadata=No
                 )
 
             indexData["FILEUUID"] = fileUUID
+
+            # Get accession number associated with file and add to list of
+            # unique accession ids for AIP if not already present
+            accessionid = _get_accession_number(admID, mets)
+            indexData["accessionid"] = accessionid
+            if accessionid is not None:
+                if accessionid not in accession_ids:
+                    accession_ids.append(accessionid)
 
             file_metadata = []
 
@@ -635,8 +658,10 @@ def _index_aip_files(client, uuid, mets, name, identifiers=None, aip_metadata=No
     # It should be revisited once we make documents smaller.
     bulk(client, _generator(), chunk_size=50)
 
+    return (len(files), accession_ids)
 
-def index_transfer_and_files(client, uuid, path, printfn=print):
+
+def index_transfer_and_files(client, uuid, path, pending_deletion=False, printfn=print):
     """Indexes Transfer and Transfer files with UUID `uuid` at path `path`.
 
     :param client: The ElasticSearch client.
@@ -656,13 +681,15 @@ def index_transfer_and_files(client, uuid, path, printfn=print):
     # Default status of a transfer file document in the index.
     status = "backlog"
 
-    transfer_name, ingest_date = "", str(datetime.date.today())
+    transfer_name, accession_id, ingest_date = "", "", str(datetime.date.today())
     try:
         transfer = Transfer.objects.get(uuid=uuid)
     except Transfer.DoesNotExist:
         pass
     else:
         transfer_name = transfer.currentlocation.split("/")[-2]
+        if transfer.accessionid:
+            accession_id = transfer.accessionid
         # It doesn't seem that Archivematica records the ingestion date
         # associated with the Transfer but we can look at the earliest file
         # entry instead - as long as there is a match which may not always be
@@ -673,10 +700,20 @@ def index_transfer_and_files(client, uuid, path, printfn=print):
         if dt:
             ingest_date = str(dt.date())
 
+    transfer_size = get_dir_size(path)
+
     printfn("Transfer UUID: " + uuid)
     printfn("Indexing Transfer files ...")
     files_indexed = _index_transfer_files(
-        client, uuid, path, ingest_date, status=status, printfn=printfn
+        client,
+        uuid,
+        path,
+        transfer_name,
+        accession_id,
+        ingest_date,
+        pending_deletion=pending_deletion,
+        status=status,
+        printfn=printfn,
     )
 
     printfn("Files indexed: " + str(files_indexed))
@@ -685,10 +722,12 @@ def index_transfer_and_files(client, uuid, path, printfn=print):
     transfer_data = {
         "name": transfer_name,
         "status": status,
+        "accessionid": accession_id,
         "ingest_date": ingest_date,
         "file_count": files_indexed,
+        "size": int(transfer_size) / (1024 * 1024),
         "uuid": uuid,
-        "pending_deletion": False,
+        "pending_deletion": pending_deletion,
     }
 
     _wait_for_cluster_yellow_status(client)
@@ -698,13 +737,26 @@ def index_transfer_and_files(client, uuid, path, printfn=print):
     return 0
 
 
-def _index_transfer_files(client, uuid, path, ingest_date, status="", printfn=print):
+def _index_transfer_files(
+    client,
+    uuid,
+    path,
+    transfer_name,
+    accession_id,
+    ingest_date,
+    status="",
+    pending_deletion=False,
+    printfn=print,
+):
     """Indexes files in the Transfer with UUID `uuid` at path `path`.
 
     :param client: ElasticSearch client.
     :param uuid: UUID of the Transfer in the DB.
     :param path: path on disk, including the transfer directory and a
                  trailing / but not including objects/.
+    :param transfer_name: name of Transfer
+    :param accession_id: optional accession ID
+    :param ingest_date: date Transfer was indexed
     :param status: optional Transfer status.
     :param printfn: optional print funtion.
     :return: number of files indexed.
@@ -714,14 +766,6 @@ def _index_transfer_files(client, uuid, path, ingest_date, status="", printfn=pr
     # Some files should not be indexed.
     # This should match the basename of the file.
     ignore_files = ["processingMCP.xml"]
-
-    # Get accessionId and name from Transfers table using UUID
-    try:
-        transfer = Transfer.objects.get(uuid=uuid)
-        accession_id = transfer.accessionid
-        transfer_name = transfer.currentlocation.split("/")[-2]
-    except Transfer.DoesNotExist:
-        accession_id = transfer_name = ""
 
     # Get dashboard UUID
     dashboard_uuid = get_dashboard_uuid()
@@ -776,6 +820,7 @@ def _index_transfer_files(client, uuid, path, ingest_date, status="", printfn=pr
                     "file_extension": file_extension,
                     "bulk_extractor_reports": bulk_extractor_reports,
                     "format": formats,
+                    "pending_deletion": pending_deletion,
                 }
 
                 _wait_for_cluster_yellow_status(client)
@@ -1069,6 +1114,45 @@ def _list_files_in_dir(path, filepaths=None):
     return filepaths
 
 
+def _get_amdSec(admID, doc):
+    """Get amdSec information for given admID.
+
+    :param admID: admID
+    :param doc: METS document to parse
+
+    :return: amdSec
+    """
+    return ns.xml_find_premis(doc, "mets:amdSec[@ID='{}']".format(admID))
+
+
+def _get_accession_number(admID, doc):
+    """Get accession number associated with a file.
+
+    Look for a <premis:event> entry within file's amdSec that has a
+    <premis:eventType> of "registration". Return the text value (with leading
+    "accession#" stripped out) from the <premis:eventOutcomeDetailNote>.
+
+    If file file does not have an amdSec (i.e. is a metadata file)
+    or no matching <premis:event> entries is found, return None.
+
+    :param admID: admID for amdSec to parse
+    :param doc: METS document to parse
+    :return: Accession number or None.
+    """
+    if admID is not None:
+        amdSec = _get_amdSec(admID, doc)
+        registration_detail_notes = ns.xml_xpath_premis(
+            amdSec,
+            ".//premis:event[premis:eventType='registration']/premis:eventOutcomeInformation/premis:eventOutcomeDetail/premis:eventOutcomeDetailNote",
+        )
+        if not registration_detail_notes:
+            return None
+        detail_text = registration_detail_notes[0].text
+        # Strip "accession#" from start of string
+        return detail_text[10:]
+    return None
+
+
 # -------
 # QUERIES
 # -------
@@ -1340,6 +1424,16 @@ def mark_aip_stored(client, uuid):
 
 def mark_backlog_deletion_requested(client, uuid):
     _update_field(client, "transfers", uuid, "pending_deletion", True)
+
+    files = _document_ids_from_field_query(client, "transferfiles", "sipuuid", uuid)
+    if len(files) > 0:
+        for file_id in files:
+            client.update(
+                body={"doc": {"pending_deletion": True}},
+                index="transferfiles",
+                doc_type=DOC_TYPE,
+                id=file_id,
+            )
 
 
 # ---------------
