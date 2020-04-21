@@ -224,6 +224,7 @@ def _get_aips_index_body():
                     "size": {"type": "double"},
                     "file_count": {"type": "integer"},
                     "uuid": {"type": "keyword"},
+                    "accessionid": {"type": "keyword"},
                 },
             }
         },
