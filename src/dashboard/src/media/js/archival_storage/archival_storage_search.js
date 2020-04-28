@@ -43,7 +43,7 @@ $(document).ready(function() {
 
   function render_file_actions_col(file_uuid) {
     var download_href = '/archival-storage/download/aip/file/' + file_uuid + '/'
-    return '<a class="btn btn-default fa-download fa" target="_blank" href="' + download_href + '">' + gettext('Download') + '</a>';
+    return '<a class="btn btn-default fa-download fa" target="_blank" href="' + download_href + '"> ' + gettext('Download') + '</a>';
   }
 
   function render_aip_name_col(name, type, row_data) {
