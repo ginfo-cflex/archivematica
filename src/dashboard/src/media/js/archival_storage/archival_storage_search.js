@@ -58,6 +58,22 @@ $(document).ready(function() {
     return accession_ids.join(',<br>');
   }
 
+  // Return array consisting of column indices for columns that should be hidden
+  // by default if there is no saved table state in DashboardSettings
+  function get_default_hidden_column_indices() {
+    return $('#id_show_files').prop('checked') ? [4, 5] : [3, 4];
+  }
+
+  // Return array consisting of column indices for columns where sorting
+  // should be disabled - i.e. Thumbnails, Actions
+  function get_unorderable_column_indices() {
+    return $('#id_show_files').prop('checked') ? [0, 6] : [8];
+  }
+
+  function get_state_url_params() {
+    return $('#id_show_files').prop('checked') ? 'aipfiles/' : 'aips/';
+  }
+
   function get_datatable() {
     if ($('#id_show_files').prop('checked')) {
       var cols = [
@@ -85,6 +101,57 @@ $(document).ready(function() {
     }
 
     return $('#archival-storage-entries').dataTable({
+        'dom': 'rtiBp',
+        'stateSave': true,
+        'stateDuration': 60 * 60 * 24 * 365 * 10, // set state duration to 10 years
+        // Only save column visibility
+        'stateSaveParams': function(settings, data) {
+            delete data.search;
+            delete data.start;
+            delete data.order;
+            delete data.length;
+            for ( var i=0 ; i< data.columns.length ; i++ ) {
+              delete data.columns[i].search;
+            }
+        },
+        'stateSaveCallback': function(settings, data) {
+            $.ajax({
+                url: '/archival-storage/save_state/' + get_state_url_params(),
+                data: JSON.stringify(data),
+                dataType: 'json',
+                type: 'POST',
+                success: function() {}
+            });
+        },
+        'stateLoadCallback': function (settings, callback) {
+            $.ajax({
+                url: '/archival-storage/load_state/' + get_state_url_params(),
+                dataType: 'json',
+                success: function (json) {
+                  callback(json);
+                },
+                // Handle case where there is no saved state
+                error: function () {
+                  callback(null);
+                }
+            });
+        },
+        'columnDefs': [
+          {
+            'targets': get_default_hidden_column_indices(),
+            'visible': false
+          },
+          {
+            'targets': get_unorderable_column_indices(),
+            'orderable': false
+          }
+        ],
+        'buttons': [
+          {
+              'extend': 'colvis',
+              'text': '<i class="fa fa-cog" aria-hidden="true"></i> ' + gettext('Select columns')
+          }
+        ],
       'language': {
         'sEmptyTable':            pgettext('DataTable - sEmptyTable',         'No data available in table'),
         'sInfo':                  pgettext('DataTable - sInfo',               'Showing _START_ to _END_ of _TOTAL_ entries'),

@@ -33,9 +33,7 @@ from elasticsearch import ElasticsearchException
 
 from amclient import AMClient
 
-from archivematicaFunctions import get_setting
-from components import advanced_search
-from components import helpers
+from components import advanced_search, helpers
 import databaseFunctions
 import elasticSearchFunctions
 import storageService as storage_service
@@ -93,9 +91,9 @@ def check_and_update_aip_pending_deletion(uuid, es_status):
     :return: None
     """
     api_results = AMClient(
-        ss_api_key=get_setting("storage_service_apikey", None),
-        ss_user_name=get_setting("storage_service_user", "test"),
-        ss_url=get_setting("storage_service_url", None).rstrip("/"),
+        ss_api_key=helpers.get_setting("storage_service_apikey", None),
+        ss_user_name=helpers.get_setting("storage_service_user", "test"),
+        ss_url=helpers.get_setting("storage_service_url", None).rstrip("/"),
         package_uuid=uuid,
     ).get_package_details()
     if not api_results:
@@ -665,3 +663,34 @@ def view_aip(request, uuid):
     }
 
     return render(request, "archival_storage/view.html", context)
+
+
+def save_state(request, table):
+    """Save DataTable state JSON object as string in DashboardSettings.
+
+    :param request: Django request.
+    :param table: Name of table to store state for.
+    :return: JSON success confirmation
+    """
+    setting_name = "{}_datatable_state".format(table)
+    state = json.dumps(request.body)
+    helpers.set_setting(setting_name, state)
+    return helpers.json_response({"success": True})
+
+
+def load_state(request, table):
+    """Retrieve DataTable state JSON object stored in DashboardSettings.
+
+    :param request: Django request.
+    :param table: Name of table to store state for.
+    :return: JSON state
+    """
+    setting_name = "{}_datatable_state".format(table)
+    state = helpers.get_setting(setting_name)
+    if state:
+        return HttpResponse(
+            json.loads(state), content_type="application/json", status=200
+        )
+    return helpers.json_response(
+        {"error": True, "message": "Setting not found"}, status_code=404
+    )
