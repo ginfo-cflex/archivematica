@@ -44,5 +44,5 @@ urlpatterns = [
     url(
         r"^thumbnail/(?P<fileuuid>" + settings.UUID_REGEX + ")/$", views.send_thumbnail
     ),
-    url(r"^$", views.overview, name="archival_storage_index"),
+    url(r"^$", views.execute, name="archival_storage_index"),
 ]
