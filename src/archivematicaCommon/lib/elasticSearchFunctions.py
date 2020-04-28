@@ -1399,6 +1399,16 @@ def _update_field(client, index, uuid, field, value):
 def mark_aip_deletion_requested(client, uuid):
     _update_field(client, "aips", uuid, "status", "DEL_REQ")
 
+    files = _document_ids_from_field_query(client, "aipfiles", "AIPUUID", uuid)
+    if len(files) > 0:
+        for file_id in files:
+            client.update(
+                body={"doc": {"status": "DEL_REQ"}},
+                index="aipfiles",
+                doc_type=DOC_TYPE,
+                id=file_id,
+            )
+
 
 def mark_aip_stored(client, uuid):
     _update_field(client, "aips", uuid, "status", "UPLOADED")
