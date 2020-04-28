@@ -222,9 +222,7 @@ def _get_aips_index_body():
                         "analyzer": "file_path_and_name",
                     },
                     "size": {"type": "double"},
-                    "file_count": {"type": "integer"},
                     "uuid": {"type": "keyword"},
-                    "accessionid": {"type": "keyword"},
                 },
             }
         },
@@ -254,7 +252,11 @@ def _get_aipfiles_index_body():
                     "isPartOf": {"type": "keyword"},
                     "AICID": {"type": "keyword"},
                     "indexedAt": {"type": "double"},
-                    "filePath": {"type": "text", "analyzer": "file_path_and_name"},
+                    "filePath": {
+                        "type": "text",
+                        "fields": {"raw": {"type": "keyword"}},
+                        "analyzer": "file_path_and_name",
+                    },
                     "fileExtension": {"type": "text"},
                     "origin": {"type": "text"},
                     "identifiers": {"type": "keyword"},
@@ -473,6 +475,7 @@ def index_aip_and_files(
         "transferMetadata": aip_metadata,
         "encrypted": encrypted,
         "accessionids": accession_ids,
+        "status": "UPLOADED",
     }
 
     _wait_for_cluster_yellow_status(client)
@@ -534,6 +537,7 @@ def _index_aip_files(client, uuid, mets, name, identifiers=None, aip_metadata=No
         "METS": {"dmdSec": {}, "amdSec": {}},
         "origin": get_dashboard_uuid(),
         "accessionid": "",
+        "status": "UPLOADED",
     }
 
     # Index all files in a fileGrup with USE='original' or USE='metadata'
