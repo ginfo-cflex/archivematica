@@ -151,6 +151,7 @@ def get_es_property_from_column_index(index, file_mode):
         (
             "name.raw",
             "uuid",
+            "AICID",
             "size",
             "file_count",
             "accessionids",
@@ -190,7 +191,6 @@ def search(request):
     queries, ops, fields, types = advanced_search.search_parameter_prep(request)
 
     file_mode = request.GET.get("file_mode") == "true"
-    # show_aics = request.GET.get("show_aics") == "true"
     page_size = int(request.GET.get("iDisplayLength", 10))
     start = int(request.GET.get("iDisplayStart", 0))
 

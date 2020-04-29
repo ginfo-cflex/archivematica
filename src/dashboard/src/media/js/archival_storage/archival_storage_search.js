@@ -22,7 +22,7 @@ $(document).ready(function() {
   var search = renderArchivalStorageSearchForm(null, null, null);
 
   function render_thumbnail(file_uuid) {
-    return '<img src="/archival-storage/thumbnail/' + file_uuid + '/">'
+    return '<img src="/archival-storage/thumbnail/' + file_uuid + '/">';
   }
 
   function render_filepath(filepath, type, row_data) {
@@ -39,22 +39,36 @@ $(document).ready(function() {
     return status == "DEL_REQ" ? "Deletion requested" : "Stored";
   }
 
-  function render_file_actions_col(file_uuid) {
+  function render_file_actions(file_uuid) {
     var download_href = '/archival-storage/download/aip/file/' + file_uuid + '/';
     var text_span = '<span class="button-text-span">' + gettext('Download') + '</span>';
     return '<a class="btn btn-default fa-download fa" target="_blank" href="' + download_href + '"> ' + text_span + '</a>';
   }
 
-  function render_aip_name_col(name, type, row_data) {
-    return '<a href="/archival-storage/' + row_data.uuid + '/">' + name + '</a>'
+  function render_aip_name(name, type, row_data) {
+    return '<a href="/archival-storage/' + row_data.uuid + '/">' + name + '</a>';
   }
 
-  function render_aip_actions_col(uuid) {
+  function render_aip_aic(aic_id, type, row_data) {
+    if (aic_id === null) {
+      return 'None';
+    } else if (row_data.type == 'AIC' && row_data.countAIPsinAIC !== null) {
+      var aip_or_aips = row_data.countAIPsinAIC > 1 ? ' AIPs' : ' AIP';
+      var count_string = ' (' + row_data.countAIPsinAIC + aip_or_aips + ' in AIC)';
+      return aic_id + count_string;
+    } else if (row_data.isPartOf === null) {
+      return 'None';
+    } else {
+      return 'Part of ' + row_data.isPartOf;
+    }
+  }
+
+  function render_aip_actions(uuid) {
     return '<a class="btn btn-default" href="/archival-storage/' + uuid + '/">' + gettext('View') + '</a>';
   }
 
   function render_aip_accession_ids(accession_ids) {
-    return accession_ids.join(',<br>');
+    return accession_ids === null ? '' : accession_ids.join(',<br>');
   }
 
   function render_aip_created_date(created) {
@@ -69,13 +83,13 @@ $(document).ready(function() {
   // Return array consisting of column indices for columns that should be hidden
   // by default if there is no saved table state in DashboardSettings
   function get_default_hidden_column_indices() {
-    return $('#id_show_files').prop('checked') ? [4, 5] : [3, 4];
+    return $('#id_show_files').prop('checked') ? [4, 5] : [2, 4, 5];
   }
 
   // Return array consisting of column indices for columns that should not sort
   // i.e. Actions, thumbnails
   function get_unorderable_column_indices() {
-    return $('#id_show_files').prop('checked') ? [0, 6] : [8];
+    return $('#id_show_files').prop('checked') ? [0, 6] : [9];
   }
 
   function get_state_url_params() {
@@ -91,20 +105,21 @@ $(document).ready(function() {
         {sTitle: gettext('AIP'), mData: 'sipname', mRender: render_file_aip_info },
         {sTitle: gettext('Accession number'), mData: 'accessionid', defaultContent: ''},
         {sTitle: gettext('Status'), mData: 'status', mRender: render_file_status },
-        {sTitle: gettext('Actions'), mData: 'FILEUUID', mRender: render_file_actions_col}
+        {sTitle: gettext('Actions'), mData: 'FILEUUID', mRender: render_file_actions }
       ];
     }
     else {
       var cols = [
-        {sTitle: gettext('Name'), mData: 'name', mRender: render_aip_name_col},
-        {sTitle: gettext('AIP UUID'), mData: 'uuid'},
+        {sTitle: gettext('Name'), mData: 'name', mRender: render_aip_name },
+        {sTitle: gettext('UUID'), mData: 'uuid'},
+        {sTitle: gettext('AIC'), mData: 'AICID', mRender: render_aip_aic },
         {sTitle: gettext('Size'), mData: 'size'},
         {sTitle: gettext('File count'), mData: 'file_count'},
         {sTitle: gettext('Accession numbers'), mData: 'accessionids', mRender: render_aip_accession_ids},
         {sTitle: gettext('Created'), mData: 'created', mRender: render_aip_created_date },
         {sTitle: gettext('Status'), mData: 'status'},
         {sTitle: gettext('Encrypted'), mData: 'encrypted', mRender: render_aip_encrypted },
-        {sTitle: gettext('Actions'), mData: 'uuid', mRender: render_aip_actions_col}
+        {sTitle: gettext('Actions'), mData: 'uuid', mRender: render_aip_actions }
       ];
     }
 
