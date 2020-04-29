@@ -61,6 +61,11 @@ $(document).ready(function() {
     return timestampToLocal(created);
   }
 
+  function render_aip_encrypted(encrypted) {
+    var string = encrypted.toString()
+    return string.charAt(0).toUpperCase() + string.slice(1);
+  }
+
   // Return array consisting of column indices for columns that should be hidden
   // by default if there is no saved table state in DashboardSettings
   function get_default_hidden_column_indices() {
@@ -98,7 +103,7 @@ $(document).ready(function() {
         {sTitle: gettext('Accession numbers'), mData: 'accessionids', mRender: render_aip_accession_ids},
         {sTitle: gettext('Created'), mData: 'created', mRender: render_aip_created_date },
         {sTitle: gettext('Status'), mData: 'status'},
-        {sTitle: gettext('Encrypted'), mData: 'encrypted'},
+        {sTitle: gettext('Encrypted'), mData: 'encrypted', mRender: render_aip_encrypted },
         {sTitle: gettext('Actions'), mData: 'uuid', mRender: render_aip_actions_col}
       ];
     }
