@@ -91,18 +91,22 @@ def check_and_update_aip_pending_deletion(uuid, es_status):
     :return: None
     """
     api_results = AMClient(
-        ss_api_key=helpers.get_setting("storage_service_apikey", None),
-        ss_user_name=helpers.get_setting("storage_service_user", "test"),
-        ss_url=helpers.get_setting("storage_service_url", None).rstrip("/"),
+        ss_api_key=helpers.get_setting("storage_service_apikey", ""),
+        ss_user_name=helpers.get_setting("storage_service_user", ""),
+        ss_url=helpers.get_setting("storage_service_url", "").rstrip("/"),
         package_uuid=uuid,
     ).get_package_details()
-    if not api_results:
-        logger.warning("AIP not found in storage service: {}".format(uuid))
+    if api_results in (1, 2, 3):
+        logger.warning(
+            "Package {} not found in storage service. AMClient error code: {}".format(
+                uuid, api_results
+            )
+        )
         return
 
-    aip_status = api_results["status"]
+    aip_status = api_results.get("status")
 
-    if aip_status == "DEL_REQ":
+    if aip_status is not None and aip_status == "DEL_REQ":
         if es_status != "DEL_REQ":
             es_client = elasticSearchFunctions.get_client()
             elasticSearchFunctions.mark_aip_deletion_requested(es_client, uuid)
