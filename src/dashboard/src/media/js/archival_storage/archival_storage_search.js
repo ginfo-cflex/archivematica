@@ -50,16 +50,14 @@ $(document).ready(function() {
   }
 
   function render_aip_aic(aic_id, type, row_data) {
-    if (aic_id === null) {
-      return 'None';
-    } else if (row_data.type == 'AIC' && row_data.countAIPsinAIC !== null) {
+    if (row_data.type === 'AIC' && row_data.countAIPsinAIC !== null) {
       var aip_or_aips = row_data.countAIPsinAIC > 1 ? ' AIPs' : ' AIP';
       var count_string = ' (' + row_data.countAIPsinAIC + aip_or_aips + ' in AIC)';
       return aic_id + count_string;
-    } else if (row_data.isPartOf === null) {
-      return 'None';
-    } else {
+    } else if (row_data.isPartOf !== null) {
       return 'Part of ' + row_data.isPartOf;
+    } else {
+      return 'None';
     }
   }
 
