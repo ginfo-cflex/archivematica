@@ -134,6 +134,8 @@ function renderArchivalStorageSearchForm(search_uri, on_success, on_error) {
 
 $(document).ready(function() {
 
+  set_create_aic_visibility();
+
   var search = renderArchivalStorageSearchForm(null, null, null);
 
   function render_thumbnail(file_uuid) {
@@ -183,7 +185,7 @@ $(document).ready(function() {
       var aip_or_aips = row_data.countAIPsinAIC > 1 ? ' AIPs' : ' AIP';
       var count_string = ' (' + row_data.countAIPsinAIC + aip_or_aips + ' in AIC)';
       return aic_id + count_string;
-    } else if (row_data.isPartOf !== null) {
+    } else if (row_data.isPartOf !== null && row_data.isPartOf !== '') {
       return 'Part of ' + row_data.isPartOf;
     } else {
       return 'None';
@@ -361,16 +363,21 @@ $(document).ready(function() {
     // to see the AIPs only, or file list.
     dtable = get_datatable();
 
+    // Refresh visibliity of Create AIC button
+    set_create_aic_visibility();
+
+  }
+
+  function set_create_aic_visibility() {
+    if ($('#id_show_files').prop('checked')) {
+      $("#create-aic-btn").hide();
+    } else {
+      $("#create-aic-btn").show();
+    }
   }
 
   $('#id_show_files').change(function() {
     refresh_search_results();
-    // Show or hide "Create an AIC" button
-    if ($('#id_show_files').prop('checked')) {
-      $("#create-aic-btn").hide()
-    } else {
-      $("#create-aic-btn").show()
-    }
   });
 
   $('#search_submit').click(function() {
