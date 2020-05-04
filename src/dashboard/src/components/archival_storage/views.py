@@ -17,7 +17,6 @@
 # along with Archivematica.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import absolute_import
 
-import ast
 import json
 import logging
 import os
@@ -52,10 +51,10 @@ AIP_STATUS_DESCRIPTIONS = {"UPLOADED": _("Stored"), "DEL_REQ": _("Deletion reque
 
 
 def check_and_remove_deleted_aips(es_client):
-    """Remove AIP and files from ES index if Storage Service reports as deleted.
+    """Remove AIP and files from ES index if Storage Service status is deleted.
 
-    Check the storage service to see if transfers marked in ES as 'pending deletion'
-    have been deleted yet.
+    Check the storage service to see if transfers marked in ES as
+    'pending deletion' have been deleted yet.
 
     :param es_client: Elasticsearch client
     :return: None
@@ -96,7 +95,9 @@ def check_and_update_aip_pending_deletion(uuid, es_status):
         ss_url=helpers.get_setting("storage_service_url", "").rstrip("/"),
         package_uuid=uuid,
     ).get_package_details()
-    if api_results in (1, 2, 3):
+
+    AMCLIENT_ERROR_CODES = (1, 2, 3)
+    if api_results in AMCLIENT_ERROR_CODES:
         logger.warning(
             "Package {} not found in storage service. AMClient error code: {}".format(
                 uuid, api_results
@@ -116,7 +117,7 @@ def execute(request):
     """Remove any deleted AIPs from ES index and render main archival storage page.
 
     :param request: The Django request object
-    :return: The main backlog page rendered
+    :return: The main archival storage page rendered
     """
     if "aips" in settings.SEARCH_ENABLED:
         es_client = elasticSearchFunctions.get_client()
@@ -138,14 +139,16 @@ def execute(request):
 
 
 def get_es_property_from_column_index(index, file_mode):
-    """
-    When the user clicks a column header in the data table, we'll receive info in the ajax request
-    telling us which column # we're supposed to sort across in our query. This function will translate
-    the column index to the corresponding property name we'll tell ES to sort on.
+    """Get ES document property name corresponding to column index in DataTable.
 
-    :param index: The column index that the data table says we're sorting on
-    :param file_mode: Whether we're looking at transfers or transfer files
-    :return: The ES document property name corresponding to the column index in the data table.
+    When the user clicks a column header in the data table, we'll receive info
+    in the AJAX request telling us which column # we're supposed to sort across
+    in our query. This function will translate the column index to the
+    corresponding property name we'll tell ES to sort on.
+
+    :param index: The column index that the data table says we're sorting on.
+    :param file_mode: Whether we're looking at transfers or transfer files.
+    :return: The ES document property name corresponding to the column index.
     """
     table_columns = (
         (
@@ -359,56 +362,60 @@ def search_augment_file_results(es_client, raw_results):
     return modifiedResults
 
 
-def create_aic(request, *args, **kwargs):
-    aic_form = forms.CreateAICForm(request.POST or None)
-    if aic_form.is_valid():
-        aip_uuids = ast.literal_eval(aic_form.cleaned_data["results"])
-        logger.info("AIC AIP UUIDs: {}".format(aip_uuids))
+def create_aic(request):
+    """Create AIC from POST-ed list of AIP UUIDs.
 
-        # The form was passed a raw list of all AIP UUIDs mapping the user's query;
-        # use those to fetch their names, which is used to produce files below.
-        query = {"query": {"terms": {"uuid": aip_uuids}}}
-        es_client = elasticSearchFunctions.get_client()
-        results = es_client.search(
-            body=query,
-            index="aips",
-            _source="uuid,name",
-            size=elasticSearchFunctions.MAX_QUERY_SIZE,  # return all records
-        )
-
-        # Create files in staging directory with AIP information
-        shared_dir = settings.SHARED_DIRECTORY
-        staging_dir = os.path.join(shared_dir, "tmp")
-
-        # Create SIP (AIC) directory in staging directory
-        temp_uuid = str(uuid.uuid4())
-        destination = os.path.join(staging_dir, temp_uuid)
-        try:
-            os.mkdir(destination)
-            os.chmod(destination, 0o770)
-        except os.error:
-            messages.error(request, "Error creating AIC")
-            logger.exception(
-                "Error creating AIC: Error creating directory {}".format(destination)
-            )
-            return redirect("archival_storage_index")
-
-        # Create SIP in DB
-        mcp_destination = destination.replace(shared_dir, "%sharedPath%") + "/"
-        databaseFunctions.createSIP(mcp_destination, UUID=temp_uuid, sip_type="AIC")
-
-        # Create files with filename = AIP UUID, and contents = AIP name
-        for aip in results["hits"]["hits"]:
-            filepath = os.path.join(destination, aip["_source"]["uuid"])
-            with open(filepath, "w") as f:
-                os.chmod(filepath, 0o660)
-                f.write(str(aip["_source"]["name"]))
-
-        return redirect("components.ingest.views.aic_metadata_add", temp_uuid)
-    else:
-        messages.error(request, "Error creating AIC")
-        logger.error("Error creating AIC: Form not valid: {}".format(aic_form))
+    :param request: Django request object.
+    :return: Direct to ingest tab.
+    """
+    uuids = request.POST.get("uuids")
+    if not uuids:
+        messages.error(request, "Unable to create AIC: No AIPs selected")
         return redirect("archival_storage_index")
+
+    # Make list from comma-separated string of UUIDs
+    aip_uuids = uuids.split(",")
+    logger.info("AIC AIP UUIDs: {}".format(aip_uuids))
+
+    # Use AIP UUIDs to fetch their names, which is used to produce files below
+    query = {"query": {"terms": {"uuid": aip_uuids}}}
+    es_client = elasticSearchFunctions.get_client()
+    results = es_client.search(
+        body=query,
+        index="aips",
+        _source="uuid,name",
+        size=elasticSearchFunctions.MAX_QUERY_SIZE,  # return all records
+    )
+
+    # Create files in staging directory with AIP information
+    shared_dir = settings.SHARED_DIRECTORY
+    staging_dir = os.path.join(shared_dir, "tmp")
+
+    # Create SIP (AIC) directory in staging directory
+    temp_uuid = str(uuid.uuid4())
+    destination = os.path.join(staging_dir, temp_uuid)
+    try:
+        os.mkdir(destination)
+        os.chmod(destination, 0o770)
+    except os.error:
+        messages.error(request, "Error creating AIC")
+        logger.exception(
+            "Error creating AIC: Error creating directory {}".format(destination)
+        )
+        return redirect("archival_storage_index")
+
+    # Create SIP in DB
+    mcp_destination = destination.replace(shared_dir, "%sharedPath%") + "/"
+    databaseFunctions.createSIP(mcp_destination, UUID=temp_uuid, sip_type="AIC")
+
+    # Create files with filename = AIP UUID, and contents = AIP name
+    for aip in results["hits"]["hits"]:
+        filepath = os.path.join(destination, aip["_source"]["uuid"])
+        with open(filepath, "w") as f:
+            os.chmod(filepath, 0o660)
+            f.write(str(aip["_source"]["name"]))
+
+    return redirect("components.ingest.views.aic_metadata_add", temp_uuid)
 
 
 def aip_download(request, uuid):

@@ -28,12 +28,12 @@
 
   {% if search_aips_enabled %}
 
-    <!-- <ul class="breadcrumb">
+    <ul class="breadcrumb">
       {% trans "Archival storage" as archival_storage_label %}
       {% trans "Search" as search_label %}
       {% breadcrumb_url archival_storage_label 'components.archival_storage.views.execute' %}
       {% breadcrumb search_label %}
-    </ul> -->
+    </ul>
 
     {% include "archival_storage/_archival_storage_search_form.html" %}
 
@@ -54,6 +54,8 @@
 
         </small>
       </h1>
+
+    <button id="create-aic-btn" class="btn btn-primary">{% trans "Create an AIC" %}</button>
 
     <table id="archival-storage-entries">
     </table>

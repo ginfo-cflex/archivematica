@@ -17,6 +17,121 @@ You should have received a copy of the GNU General Public License
 along with Archivematica.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+function selectField(el) {
+  var target = $(el.parentNode.nextSibling.firstChild);
+  if (el.value == 'transferMetadataOther') {
+    target.show('fade', {}, 250);
+  } else {
+    target.hide('fade', {}, 250);
+  }
+}
+
+function renderArchivalStorageSearchForm(search_uri, on_success, on_error) {
+  // create new form instance, providing a single row of default data
+  var search = new advancedSearch.AdvancedSearchView({
+    el: $('#search_form_container'),
+//    allowAdd: false,
+    rowTemplate: {
+      'op': '',
+      'query': '',
+      'field': '',
+      'fieldName': '',
+      'type': 'term'
+    },
+    'deleteHandleHtml': '<img src="/media/images/delete.png" style="margin-left: 5px"/>',
+    'addHandleHtml': '<a>' + gettext('Add new') + '</a>'
+  });
+
+  // define op field
+  var opAttributes = {
+    title: 'boolean operator',
+    class: 'search_op_selector form-control'
+  }
+  search.addSelect('op', opAttributes, {
+    'or': 'or',
+    'and': 'and',
+    'not': 'not'
+  });
+
+  // define query field
+  search.addInput('query', {title: 'search query', 'class': 'aip-search-query-input form-control'});
+
+  // default field name field
+  search.addSelect('field', {title: 'field name', 'class': 'form-control', onchange: 'selectField(this)'}, {
+    '': gettext('Any'),
+    'FILEUUID': gettext('File UUID'),
+    'filePath': gettext('File path'),
+    'fileExtension': gettext('File extension'),
+    'AIPUUID': gettext('AIP UUID'),
+    'sipName': gettext('AIP name'),
+    'identifiers': gettext('Identifiers'),
+    'isPartOf': gettext('Part of AIC'),
+    'AICID': gettext('AIC Identifier'),
+    'transferMetadata': gettext('Transfer metadata'),
+    'transferMetadataOther': gettext('Transfer metadata (other)'),
+  });
+
+  // "Other" field name, when selecting "transfer metadata (other)"
+  search.addInput('fieldName', {
+    title: gettext('other field name'),
+    'class': 'aip-search-query-input form-control',
+    'id': 'aip-search-query-other-field-name'
+  });
+
+  // default field name field
+  search.addSelect('type', {title: 'query type', 'class': 'form-control'}, {
+    'term': gettext('Keyword'),
+    'string': gettext('Phrase'),
+    'range': gettext('Date range')
+  });
+
+  // don't show first op field
+  search.fieldVisibilityCheck = function(rowIndex, fieldName) {
+    return rowIndex > 0 || fieldName != 'op';
+  };
+
+  // override default search state if URL parameters set
+  if (search.urlParamsToData()) {
+    search.rows = search.urlParamsToData();
+  }
+
+  search.render();
+
+  // Ensure the select field name field is hidden/displayed as appropriate
+  selectField($('.advanced_search_form_field_field > select')[0]);
+
+  if (on_success !== null) {
+    function aipSearchSubmit() {
+      // Query Django, which queries ElasticSearch, to get the backlog file info
+      var query_url = search_uri + '?' + search.toUrlParams();
+      if($('#id_show_files').is(':checked')) {
+        query_url += '&filemode=true';
+      }
+      $.ajax({
+        type: 'GET',
+        url: query_url,
+        data: null,
+        success: on_success,
+        error: function(jqXHR, textStatus, errorThrown) {
+          on_error(query_url, jqXHR, textStatus, errorThrown);
+        },
+      });
+    }
+
+    // submit logic
+    $('#search_submit').click(function() {
+      aipSearchSubmit();
+    });
+
+    $('#search_form').submit(function() {
+      aipSearchSubmit();
+      return false;
+    });
+  }
+
+  return search;
+}
+
 $(document).ready(function() {
 
   var search = renderArchivalStorageSearchForm(null, null, null);
@@ -26,12 +141,23 @@ $(document).ready(function() {
   }
 
   function render_filepath(filepath, type, row_data) {
-    var view_raw = ' (<a href="/archival-storage/search/json/file/' + row_data.document_id_no_hyphens + '/">view raw</a>)';
-    return filepath + view_raw; 
+    var view_raw = ' (<a href="/archival-storage/search/json/file/'
+      + row_data.document_id_no_hyphens
+      + '/">view raw</a>)';
+    // remove 'objects/' from beginning of path
+    var objects_prefix = 'objects/';
+    var objects_prefix_length = objects_prefix.length;
+    var formatted_path = filepath.startsWith(objects_prefix)
+      ? filepath.substring(objects_prefix_length)
+      : filepath;
+    return formatted_path + view_raw;
   }
 
   function render_file_aip_info(sip_name, type, row_data) {
-    var aip_name_with_link = '<a href="/archival-storage/' + row_data.AIPUUID + '/">' + sip_name + '</a>';
+    var aip_name_with_link = '<a href="/archival-storage/'
+      + row_data.AIPUUID + '/">'
+      + sip_name
+      + '</a>';
     return aip_name_with_link + '<br>' + row_data.AIPUUID;
   }
 
@@ -42,7 +168,10 @@ $(document).ready(function() {
   function render_file_actions(file_uuid) {
     var download_href = '/archival-storage/download/aip/file/' + file_uuid + '/';
     var text_span = '<span class="button-text-span">' + gettext('Download') + '</span>';
-    return '<a class="btn btn-default fa-download fa" target="_blank" href="' + download_href + '"> ' + text_span + '</a>';
+    return '<a class="btn btn-default fa-download fa" target="_blank" href="'
+      + download_href + '"> '
+      + text_span
+      + '</a>';
   }
 
   function render_aip_name(name, type, row_data) {
@@ -62,7 +191,10 @@ $(document).ready(function() {
   }
 
   function render_aip_actions(uuid) {
-    return '<a class="btn btn-default" href="/archival-storage/' + uuid + '/">' + gettext('View') + '</a>';
+    return '<a class="btn btn-default" href="/archival-storage/'
+      + uuid + '/">'
+      + gettext('View')
+      + '</a>';
   }
 
   function render_aip_accession_ids(accession_ids) {
@@ -112,7 +244,7 @@ $(document).ready(function() {
         {sTitle: gettext('UUID'), mData: 'uuid'},
         {sTitle: gettext('AIC'), mData: 'AICID', mRender: render_aip_aic },
         {sTitle: gettext('Size'), mData: 'size'},
-        {sTitle: gettext('File count'), mData: 'file_count'},
+        {sTitle: gettext('File count'), mData: 'file_count', defaultContent: ''},
         {sTitle: gettext('Accession numbers'), mData: 'accessionids', mRender: render_aip_accession_ids},
         {sTitle: gettext('Created'), mData: 'created', mRender: render_aip_created_date },
         {sTitle: gettext('Status'), mData: 'status'},
@@ -226,13 +358,19 @@ $(document).ready(function() {
     $('#archival-storage-entries').empty();
 
     // Return the correct datatable based on whether the user has selected
-    // to see the transfer backlog only, or file list.
+    // to see the AIPs only, or file list.
     dtable = get_datatable();
 
   }
 
   $('#id_show_files').change(function() {
     refresh_search_results();
+    // Show or hide "Create an AIC" button
+    if ($('#id_show_files').prop('checked')) {
+      $("#create-aic-btn").hide()
+    } else {
+      $("#create-aic-btn").show()
+    }
   });
 
   $('#search_submit').click(function() {
@@ -249,122 +387,17 @@ $(document).ready(function() {
     }
   });
 
-});
-
-function selectField(el) {
-  var target = $(el.parentNode.nextSibling.firstChild);
-  if (el.value == 'transferMetadataOther') {
-    target.show('fade', {}, 250);
-  } else {
-    target.hide('fade', {}, 250);
-  }
-}
-
-function renderArchivalStorageSearchForm(search_uri, on_success, on_error) {
-  // create new form instance, providing a single row of default data
-  var search = new advancedSearch.AdvancedSearchView({
-    el: $('#search_form_container'),
-//    allowAdd: false,
-    rowTemplate: {
-      'op': '',
-      'query': '',
-      'field': '',
-      'fieldName': '',
-      'type': 'term'
-    },
-    'deleteHandleHtml': '<img src="/media/images/delete.png" style="margin-left: 5px"/>',
-    'addHandleHtml': '<a>' + gettext('Add new') + '</a>'
-  });
-
-  // define op field
-  var opAttributes = {
-    title: 'boolean operator',
-    class: 'search_op_selector form-control'
-  }
-  search.addSelect('op', opAttributes, {
-    'or': 'or',
-    'and': 'and',
-    'not': 'not'
-  });
-
-  // define query field
-  search.addInput('query', {title: 'search query', 'class': 'aip-search-query-input form-control'});
-
-  // default field name field
-  search.addSelect('field', {title: 'field name', 'class': 'form-control', onchange: 'selectField(this)'}, {
-    '': gettext('Any'),
-    'FILEUUID': gettext('File UUID'),
-    'filePath': gettext('File path'),
-    'fileExtension': gettext('File extension'),
-    'AIPUUID': gettext('AIP UUID'),
-    'sipName': gettext('AIP name'),
-    'identifiers': gettext('Identifiers'),
-    'isPartOf': gettext('Part of AIC'),
-    'AICID': gettext('AIC Identifier'),
-    'transferMetadata': gettext('Transfer metadata'),
-    'transferMetadataOther': gettext('Transfer metadata (other)'),
-  });
-
-  // "Other" field name, when selecting "transfer metadata (other)"
-  search.addInput('fieldName', {
-    title: gettext('other field name'),
-    'class': 'aip-search-query-input form-control',
-    'id': 'aip-search-query-other-field-name'
-  });
-
-  // default field name field
-  search.addSelect('type', {title: 'query type', 'class': 'form-control'}, {
-    'term': gettext('Keyword'),
-    'string': gettext('Phrase'),
-    'range': gettext('Date range')
-  });
-
-  // don't show first op field
-  search.fieldVisibilityCheck = function(rowIndex, fieldName) {
-    return rowIndex > 0 || fieldName != 'op';
-  };
-
-  // override default search state if URL parameters set
-  if (search.urlParamsToData()) {
-    search.rows = search.urlParamsToData();
-  }
-
-  search.render();
-
-  // Ensure the select field name field is hidden/displayed as appropriate
-  selectField($('.advanced_search_form_field_field > select')[0]);
-
-  if (on_success !== null) {
-    function aipSearchSubmit() {
-      // Query Django, which queries ElasticSearch, to get the backlog file info
-      var query_url = search_uri + '?' + search.toUrlParams();
-      if($('#id_show_files').is(':checked')) {
-        query_url += '&filemode=true';
-      }
-      if($('#id_show_aics').is(':checked')) {
-        query_url += '&show_aics=true';
-      }
-      $.ajax({
-        type: 'GET',
-        url: query_url,
-        data: null,
-        success: on_success,
-        error: function(jqXHR, textStatus, errorThrown) {
-          on_error(query_url, jqXHR, textStatus, errorThrown);
-        },
-      });
+  $("#create-aic-btn").click(function() {
+    var aip_uuids = []
+    // Get object containing UUIDs from DataTable
+    var table_uuids = $('#id_show_files').prop('checked')
+      ? []
+      : $('#archival-storage-entries').DataTable().column(1).data();
+    // Add each UUID in returned object to clean aip_uuids array
+    for (i = 0; i < table_uuids.length; i++) {
+      aip_uuids.push(table_uuids[i]);
     }
-
-    // submit logic
-    $('#search_submit').click(function() {
-      aipSearchSubmit();
-    });
-
-    $('#search_form').submit(function() {
-      aipSearchSubmit();
-      return false;
-    });
-  }
-
-  return search;
-}
+    // Redirect window to create_aic, passing AIPs UUIDs in POST request
+    $.redirectPost('/archival-storage/search/create_aic/', {'uuids': aip_uuids});
+  });
+});
