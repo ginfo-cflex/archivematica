@@ -29,20 +29,22 @@ import os
 import re
 import sys
 import time
+from lxml import etree
 
 from django.db.models import Min, Q
-from elasticsearch import Elasticsearch, ImproperlyConfigured
-from elasticsearch.helpers import bulk
-from lxml import etree
-from six.moves import range
+from main.models import File, Identifier, Transfer
 
 # archivematicaCommon
 from archivematicaFunctions import get_dashboard_uuid
-from externals import xmltodict
 import namespaces as ns
 import version
 
-from main.models import File, Identifier, Transfer
+from externals import xmltodict
+
+from elasticsearch import Elasticsearch, ImproperlyConfigured
+from elasticsearch.helpers import bulk
+
+from six.moves import range
 
 
 logger = logging.getLogger("archivematica.common")

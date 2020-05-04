@@ -33,15 +33,14 @@ from elasticsearch import ElasticsearchException
 from amclient import AMClient
 
 from components import advanced_search, helpers
-import databaseFunctions
-import elasticSearchFunctions
-import storageService as storage_service
-
 from components.archival_storage import forms
 from components.archival_storage.atom import (
     upload_dip_metadata_to_atom,
     AtomMetadataUploadError,
 )
+import databaseFunctions
+import elasticSearchFunctions
+import storageService as storage_service
 
 logger = logging.getLogger("archivematica.dashboard")
 
