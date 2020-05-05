@@ -351,7 +351,7 @@ def search_augment_file_results(es_client, raw_results):
             aip = None
             clone["sipname"] = False
 
-        clone["status"] = clone.get("status", "UPLOADED")
+        clone["status"] = AIP_STATUS_DESCRIPTIONS[clone.get("status", "UPLOADED")]
         clone["filename"] = os.path.basename(clone["filePath"])
         clone["document_id"] = item["_id"]
         clone["document_id_no_hyphens"] = item["_id"].replace("-", "____")

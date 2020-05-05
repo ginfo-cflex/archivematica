@@ -145,8 +145,10 @@ $(document).ready(function() {
   function render_filepath(filepath, type, row_data) {
     var view_raw = ' (<a href="/archival-storage/search/json/file/'
       + row_data.document_id_no_hyphens
-      + '/">view raw</a>)';
-    // remove 'objects/' from beginning of path
+      + '/">'
+      + gettext('view raw')
+      + '</a>)';
+    // Remove 'objects/' from beginning of path
     var objects_prefix = 'objects/';
     var objects_prefix_length = objects_prefix.length;
     var formatted_path = filepath.startsWith(objects_prefix)
@@ -163,15 +165,12 @@ $(document).ready(function() {
     return aip_name_with_link + '<br>' + row_data.AIPUUID;
   }
 
-  function render_file_status(status) {
-    return status == "DEL_REQ" ? "Deletion requested" : "Stored";
-  }
-
   function render_file_actions(file_uuid) {
     var download_href = '/archival-storage/download/aip/file/' + file_uuid + '/';
     var text_span = '<span class="button-text-span">' + gettext('Download') + '</span>';
     return '<a class="btn btn-default fa-download fa" target="_blank" href="'
-      + download_href + '"> '
+      + download_href
+      + '"> '
       + text_span
       + '</a>';
   }
@@ -182,13 +181,14 @@ $(document).ready(function() {
 
   function render_aip_aic(aic_id, type, row_data) {
     if (row_data.type === 'AIC' && row_data.countAIPsinAIC !== null) {
-      var aip_or_aips = row_data.countAIPsinAIC > 1 ? ' AIPs' : ' AIP';
-      var count_string = ' (' + row_data.countAIPsinAIC + aip_or_aips + ' in AIC)';
-      return aic_id + count_string;
+      var aip_or_aips = row_data.countAIPsinAIC > 1
+        ? gettext('AIPs in AIC')
+        : gettext('AIP in AIC');
+      return aic_id + ' (' + row_data.countAIPsinAIC + ' ' + aip_or_aips + ')';
     } else if (row_data.isPartOf !== null && row_data.isPartOf !== '') {
-      return 'Part of ' + row_data.isPartOf;
+      return gettext('Part of') + ' ' + row_data.isPartOf;
     } else {
-      return 'None';
+      return gettext('None');
     }
   }
 
@@ -208,8 +208,11 @@ $(document).ready(function() {
   }
 
   function render_aip_encrypted(encrypted) {
-    var string = encrypted.toString()
-    return string.charAt(0).toUpperCase() + string.slice(1);
+    return encrypted == true ? gettext('True') : gettext('False');
+  }
+
+  function render_status(status) {
+    return status == "Deletion requested" ? gettext("Deletion requested") : gettext("Stored");
   }
 
   // Return array consisting of column indices for columns that should be hidden
@@ -219,7 +222,7 @@ $(document).ready(function() {
   }
 
   // Return array consisting of column indices for columns that should not sort
-  // i.e. Actions, thumbnails
+  // i.e. Actions, Thumbnails
   function get_unorderable_column_indices() {
     return $('#id_show_files').prop('checked') ? [0, 6] : [9];
   }
@@ -236,7 +239,7 @@ $(document).ready(function() {
         {sTitle: gettext('File UUID'), mData: 'FILEUUID'},
         {sTitle: gettext('AIP'), mData: 'sipname', mRender: render_file_aip_info },
         {sTitle: gettext('Accession number'), mData: 'accessionid', defaultContent: ''},
-        {sTitle: gettext('Status'), mData: 'status', mRender: render_file_status },
+        {sTitle: gettext('Status'), mData: 'status', mRender: render_status },
         {sTitle: gettext('Actions'), mData: 'FILEUUID', mRender: render_file_actions }
       ];
     }
@@ -249,7 +252,7 @@ $(document).ready(function() {
         {sTitle: gettext('File count'), mData: 'file_count', defaultContent: ''},
         {sTitle: gettext('Accession numbers'), mData: 'accessionids', mRender: render_aip_accession_ids},
         {sTitle: gettext('Created'), mData: 'created', mRender: render_aip_created_date },
-        {sTitle: gettext('Status'), mData: 'status'},
+        {sTitle: gettext('Status'), mData: 'status', mRender: render_status },
         {sTitle: gettext('Encrypted'), mData: 'encrypted', mRender: render_aip_encrypted },
         {sTitle: gettext('Actions'), mData: 'uuid', mRender: render_aip_actions }
       ];
